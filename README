@@ -1,0 +1,463 @@
+NAME
+    ps-prechecks - Summarizes information about your MySQL instance to help
+    prepare migration into PlanetScale
+
+SYNOPSIS
+    Usage: ps-prechecks [OPTIONS]
+
+    ps-prechecks summarizes the status and configuration of a MySQL database
+    server so that you can learn about it at a glance, as well as allowing
+    you to share the relevant information with PlanetScale. It is not a
+    tuning tool or diagnosis tool. It produces a report that is easy to diff
+    and can be pasted into emails without losing the formatting. It should
+    work well on any modern UNIX systems.
+
+    ps-prechecks is a heavily modified version of pt-mysql-summary, which is
+    part of the Percona Toolkit.
+
+RISKS
+    ps-prechecks is designed to connect to your live database environment,
+    execute queries to collect the relevant information, and
+    process/summarize the data without further impacting your database
+    environment. While this scipt is well tested, any database tool can pose
+    a risk to your database environment.
+
+    Before using this tool, please:
+
+    *   Read the tool's documentation
+
+    *   Test the tool on a non-production server first
+
+    *   Backup your production server and verify the backups
+
+DESCRIPTION
+    ps-prechecks works by connecting to a MySQL database server and querying
+    it for status and configuration information. It saves these bits of data
+    into files in a temporary directory, and then formats them neatly with
+    awk and other scripting languages.
+
+    To use, simply execute it. Optionally add a double dash and then the
+    same command-line options you would use to connect to MySQL, such as the
+    following:
+
+      ps-prechecks --user=root
+
+    The tool interacts minimally with the server upon which it runs.
+
+OUTPUT
+    Many of the outputs from this tool are deliberately rounded to show
+    their magnitude but not the exact detail. This is called fuzzy-rounding.
+    The idea is that it does not matter whether a server is running 918
+    queries per second or 921 queries per second; such a small variation is
+    insignificant, and only makes the output hard to compare to other
+    servers. Fuzzy-rounding rounds in larger increments as the input grows.
+    It begins by rounding to the nearest 5, then the nearest 10, nearest 25,
+    and then repeats by a factor of 10 larger (50, 100, 250), and so on, as
+    the input grows.
+
+    The following is a sample of the report that the tool produces:
+
+      # PlanetScale Migration Pre-Check Report #####################
+                       System time | 2023-01-11 12:20:04 UTC (local TZ: WET +0000)
+
+      # Summary ####################################################
+        Rows written since startup | 182808
+           Rows read since startup | 334077
+        Daily average rows written | 172800
+           Daily average rows read | 345600
+
+      # Table Information (in GB) ##################################
+                             Total | 0.14
+                          salaries | 0.09
+                          dept_emp | 0.02
+                            titles | 0.02
+                         employees | 0.01
+                        copy_state | 0.00
+                       departments | 0.00
+                      dept_manager | 0.00
+                resharding_journal | 0.00
+                 schema_migrations | 0.00
+                      vreplication | 0.00
+                  current_dept_emp | NULL
+              dept_emp_latest_date | NULL
+
+    The first two sections collect the information that is most relevant to
+    understanding which PlanetScale deployment option is right for you, and
+    how the data is currently distributed. This is detected by reading the
+    values of various status counters and by reading from the
+    INFORMATION_SCHEMA tables. If the user connecting to the database
+    doesn't have the right permissions to read these sources, these sections
+    may appear empty.
+
+      # Report On Port 3306 ########################################
+                              User | admin@%
+                              Time | 2023-01-11 12:19:39 (UTC)
+                          Hostname | localhost
+                           Version | 8.0.18-google (Google)
+                          Built On | Linux x86_64
+                    Cloud Platform | Google CloudSQL
+                           Started | 2023-01-10 16:17 (up 0+20:02:34)
+                         Databases | 6
+                           Datadir | /mysql/datadir/
+                         Processes | 6 connected, 2 running
+                       Replication | Is not a replica, has 0 replicas connected
+
+    This section is a quick summary of the MySQL instance: version, uptime,
+    and other very basic parameters. The Time output is generated from the
+    MySQL server, unlike the system date and time printed earlier, so you
+    can see whether the database and operating system times match.
+
+      # Noteworthy Variables #######################################
+              Auto-Inc Incr/Offset | 1/1
+            default_storage_engine | InnoDB
+                        flush_time | 0
+                      init_connect |
+                         init_file |
+                          sql_mode | ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+                   max_connections | 4030
+                  optimizer_switch | index_merge=on,index_merge_union=on,index_merge_sort_union=on,index_merge_intersection=on,engine_condition_pushdown=on,index_condition_pushdown=on,mrr=on,mrr_cost_based=on,block_nested_loop=on,batched_key_access=off,materialization=on,semijoin=on,loosescan=on,firstmatch=on,duplicateweedout=on,subquery_materialization_cost_based=on,use_index_extensions=on,condition_fanout_filter=on,derived_merge=on,use_invisible_indexes=off,skip_scan=on,hash_join=on
+                      tx_isolation |
+                  join_buffer_size | 256k
+                  sort_buffer_size | 256k
+                  read_buffer_size | 128k
+              read_rnd_buffer_size | 256k
+                bulk_insert_buffer | 0.00
+               max_heap_table_size | 16M
+                    tmp_table_size | 16M
+                max_allowed_packet | 32M
+                      thread_stack | 280k
+         innodb_log_files_in_group | 2
+               innodb_flush_method | O_DIRECT
+    innodb_flush_log_at_trx_commit | 1
+            innodb_read_io_threads | 4
+           innodb_write_io_threads | 4
+         innodb_thread_concurrency | 0
+          innodb_adaptive_flushing | ON
+        innodb_adaptive_checkpoint |
+           innodb_buffer_pool_size | 19G
+              innodb_log_file_size | 512M
+            innodb_log_buffer_size | 16M
+                  log_slow_queries |
+     log_queries_not_using_indexes | OFF
+
+    This section shows several noteworthy server configuration variables
+    that might be important to know about when working with this server.
+
+      # Noteworthy Technologies ####################################
+                Full Text Indexing | No
+                  Geospatial Types | No
+                      Foreign Keys | Yes
+                      Partitioning | No
+                InnoDB Compression | No
+                               SSL | No
+              Explicit LOCK TABLES | No
+                   XA Transactions | No
+               Prepared Statements | Yes
+
+    This section shows some specific technologies used on this server. Some
+    of them are detected from the schema dump performed for the previous
+    sections; others can be detected by looking at SHOW GLOBAL STATUS.
+
+      # Processlist ################################################
+
+        Command                        COUNT(*) Working SUM(Time) MAX(Time)
+        ------------------------------ -------- ------- --------- ---------
+        Binlog Dump                           1       1    150000    150000
+        Query                                 1       1         0         0
+
+        User                           COUNT(*) Working SUM(Time) MAX(Time)
+        ------------------------------ -------- ------- --------- ---------
+        msandbox                              2       2    150000    150000
+
+        Host                           COUNT(*) Working SUM(Time) MAX(Time)
+        ------------------------------ -------- ------- --------- ---------
+        localhost                             2       2    150000    150000
+
+        db                             COUNT(*) Working SUM(Time) MAX(Time)
+        ------------------------------ -------- ------- --------- ---------
+        NULL                                  2       2    150000    150000
+
+        State                          COUNT(*) Working SUM(Time) MAX(Time)
+        ------------------------------ -------- ------- --------- ---------
+        Master has sent all binlog to         1       1    150000    150000
+        NULL                                  1       1         0         0
+
+    This section is a summary of the output from SHOW PROCESSLIST. Each
+    sub-section is aggregated by a different item, which is shown as the
+    first column heading. When summarized by Command, every row in SHOW
+    PROCESSLIST is included, but otherwise, rows whose Command is Sleep are
+    excluded from the SUM and MAX columns, so they do not skew the numbers
+    too much. In the example shown, the server is idle except for this tool
+    itself, and one connected replica, which is executing Binlog Dump.
+
+    The columns are the number of rows included, the number that are not in
+    Sleep status, the sum of the Time column, and the maximum Time column.
+    The numbers are fuzzy-rounded.
+
+      # Status Counters (Wait 5 Seconds) ###########################
+      Bytes_received                         20000000         225         600
+      Bytes_sent                            225000000        2500        4500
+      Com_insert                                    1
+      Com_select                                50000                       3
+      Com_set_option                             6000
+      Com_update                                 3000
+      Connections                               40000
+      Max_used_connections                         35
+      Queries                                  125000           1           6
+      Questions                                125000           1           6
+      Select_full_join                           3500
+      Select_range                               3000
+      Select_scan                               80000                       2
+      Sort_rows                                 35000                       6
+      Sort_scan                                 20000                       1
+      Threads_connected                            30
+      Threads_created                              35
+      Threads_running                               1
+
+    This section shows selected counters from two snapshots of SHOW GLOBAL
+    STATUS, gathered approximately 10 seconds apart and fuzzy-rounded.
+
+    The first column is the variable name, and the second column is the
+    counter from the first snapshot divided by 86400 (the number of seconds
+    in a day), so you can see the magnitude of the counter's change per day.
+
+    The third column is the value from the first snapshot, divided by Uptime
+    and then fuzzy-rounded, so it represents approximately how quickly the
+    counter is growing per-second over the uptime of the server.
+
+    The third column is the incremental difference from the first and second
+    snapshot, divided by the difference in uptime and then fuzzy-rounded.
+    Therefore, it shows how quickly the counter is growing per second at the
+    time the report was generated.
+
+      # Configuration File #########################################
+                    Config File | /tmp/12345/my.sandbox.cnf
+      [client]
+      user                                = msandbox
+      password                            = msandbox
+      port                                = 12345
+      socket                              = /tmp/12345/mysql_sandbox12345.sock
+      [mysqld]
+      port                                = 12345
+      socket                              = /tmp/12345/mysql_sandbox12345.sock
+      pid-file                            = /tmp/12345/data/mysql_sandbox12345.pid
+      basedir                             = /home/baron/5.5.20
+      datadir                             = /tmp/12345/data
+      key_buffer_size                     = 16M
+      innodb_buffer_pool_size             = 16M
+      innodb_data_home_dir                = /tmp/12345/data
+      innodb_log_group_home_dir           = /tmp/12345/data
+      innodb_data_file_path               = ibdata1:10M:autoextend
+      innodb_log_file_size                = 5M
+      log-bin                             = mysql-bin
+      relay_log                           = mysql-relay-bin
+      log_slave_updates
+      server-id                           = 12345
+      report-host                         = 127.0.0.1
+      report-port                         = 12345
+      log-error                           = mysqld.log
+      innodb_lock_wait_timeout            = 3
+
+    In case the tool is run locally on the machine your MySQL Server is
+    running on, this section shows a pretty-printed version of the my.cnf
+    file, with comments removed and with whitespace added to align things
+    for easy reading. The tool tries to detect the my.cnf file by looking at
+    the output of ps, and if it does not find the location of the file
+    there, it tries common locations until it finds a file. Note that this
+    file might not actually correspond with the server from which the report
+    was generated. This can happen when the tool is run against a cloud
+    environment, or is run remotely against the same server it's reporting
+    on, or when detecting the location of the configuration file fails.
+
+      # Schema #####################################################
+
+        Database  Tables Views SPs Trigs Funcs   FKs Casc Partn
+        employees      6     2                     6    6
+
+        Database  InnoDB
+        employees      6
+
+        Database  BTREE
+        employees    15
+
+                    c   v   i   d   e
+                    h   a   n   a   n
+                    a   r   t   t   u
+                    r   c       e   m
+                        h
+                        a
+                        r
+        Database  === === === === ===
+        employees   3   4   6  10   1
+
+    If you specify "--databases" or "--all-databases", the tool will print
+    the above section. This summarizes the number and type of objects in the
+    databases. It is generated by running "mysqldump --no-data", not by
+    querying the INFORMATION_SCHEMA, which can freeze a busy server.
+
+    The first sub-report in the section is the count of objects by type in
+    each database: tables, views, and so on. The second one shows how many
+    tables use various storage engines in each database. The third
+    sub-report shows the number of each type of indexes in each database.
+
+    The last section shows the number of columns of various data types in
+    each database. For compact display, the column headers are formatted
+    vertically, so you need to read downwards from the top. In this example,
+    the first column is "char" and the second column is "timestamp". This
+    example is truncated so it does not wrap on a terminal.
+
+    All of the numbers in this portion of the output are exact, not
+    fuzzy-rounded.
+
+      # Binary Logging #############################################
+                           Binlogs | 2
+                        Zero-Sized | 0
+                        Total Size | 5.1M
+                     binlog_format | ROW
+                  expire_logs_days | 0
+                       sync_binlog | 1
+
+    This section shows configuration and status of the binary logs. If there
+    are zero-sized binary logs, then it is possible that the binlog index is
+    out of sync with the binary logs that actually exist on disk.
+
+OPTIONS
+    All options after -- are passed to "mysql".
+
+    --all-databases
+        mysqldump and summarize all databases. See "--databases".
+
+    --ask-pass
+        Prompt for a password when connecting to MySQL.
+
+    --config
+        type: string
+
+        Read this comma-separated list of config files. If specified, this
+        must be the first option on the command line.
+
+    --databases
+        type: string
+
+        mysqldump and summarize this comma-separated list of databases.
+        Specify "--all-databases" instead if you want to dump and summary
+        all databases.
+
+    --defaults-file
+        short form: -F; type: string
+
+        Only read mysql options from the given file. You must give an
+        absolute pathname.
+
+    --help
+        Print help and exit.
+
+    --host
+        short form: -h; type: string
+
+        Host to connect to.
+
+    --md
+        Generate output using MarkDown format instead of plain text.
+
+    --password
+        short form: -p; type: string
+
+        Password to use when connecting. If password contains commas they
+        must be escaped with a backslash: "exam\,ple"
+
+    --port
+        short form: -P; type: int
+
+        Port number to use for connection.
+
+    --read-samples
+        type: string
+
+        Create a report from the files found in this directory.
+
+    --save-samples
+        type: string
+
+        Save the data files used to generate the summary in this directory.
+
+    --sleep
+        type: int; default: 10
+
+        Seconds to sleep when gathering status counters.
+
+    --socket
+        short form: -S; type: string
+
+        Socket file to use for connection.
+
+    --user
+        short form: -u; type: string
+
+        User for login if not current user.
+
+    --version
+        Print tool's version and exit.
+
+ENVIRONMENT
+    This tool does not use any environment variables.
+
+SYSTEM REQUIREMENTS
+    This tool requires Bash v3 or newer, Perl 5.8 or newer, and binutils.
+    These are generally already provided by most distributions. On BSD
+    systems, it may require a mounted procfs.
+
+BUGS
+    Please report bugs to liz@planetscale.com, or the PlanetScale
+    representative you're working with. Include the following information in
+    your bug report:
+
+    *   Complete command-line used to run the tool
+
+    *   Tool "--version"
+
+    *   MySQL version of all servers involved
+
+    *   Output from the tool including STDERR
+
+    *   Input files (log/dump/config files, etc.)
+
+    If possible, include debugging output by running the tool with
+    "PSDEBUG"; see "ENVIRONMENT".
+
+ATTENTION
+    Using <PSDEBUG> might expose passwords. When debug is enabled, all
+    command line parameters are shown in the output.
+
+AUTHORS
+    Baron Schwartz, Brian Fraser, Daniel Nichter and Liz van Dijk
+
+ABOUT PERCONA TOOLKIT
+    This tool is a heavily modified version of pt-mysql-summary, which is
+    part of Percona Toolkit, a collection of advanced command-line tools for
+    MySQL developed by Percona. Percona Toolkit was forked from two projects
+    in June, 2011: Maatkit and Aspersa. Those projects were created by Baron
+    Schwartz and primarily developed by him and Daniel Nichter. Visit
+    <http://www.percona.com/software/> to learn about other free,
+    open-source software from Percona.
+
+COPYRIGHT, LICENSE, AND WARRANTY
+    This program is copyright 2011-2021 Percona LLC and/or its affiliates,
+    2010-2011 Baron Schwartz.
+
+    THIS PROGRAM IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
+    WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
+    MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+
+    This program is free software; you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by the
+    Free Software Foundation, version 2; OR the Perl Artistic License. On
+    UNIX and similar systems, you can issue `man perlgpl' or `man
+    perlartistic' to read these licenses.
+
+    You should have received a copy of the GNU General Public License along
+    with this program; if not, write to the Free Software Foundation, Inc.,
+    59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
+
+VERSION
+    ps-prechecks 1.0
