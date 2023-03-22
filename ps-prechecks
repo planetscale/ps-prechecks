@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # This program is a derivative of pt-mysql-summary, which is a part 
 # of Percona Toolkit: http://www.percona.com/software/
