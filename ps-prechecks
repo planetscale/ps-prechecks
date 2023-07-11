@@ -77,8 +77,10 @@ OPT_ERRS=0        # How many command line option errors
 OPT_VERSION=""    # If --version was specified
 OPT_HELP=""       # If --help was specified
 OPT_ASK_PASS=""   # If --ask-pass was specified
-OPT_MD=""         # If --md was specified
+OPT_TXT=""        # If --txt was specified
+TIMESTAMP=""      # For report and samples folders
 PO_DIR=""         # Directory with program option spec files
+SAMPLES_DIR=""    # Directory with saved samples
 
 usage() {
    local file="$1"
@@ -153,12 +155,15 @@ usage_or_errors() {
       echo
       echo "Example command:"
       echo
-      echo "     ./ps-prechecks --host <hostname> --user <user> --port 3306 --ask-pass --all-databases --sleep 60 --save-samples raw_samples"
+      echo "     ./ps-prechecks --host <hostname> --user <user> --port 3306 --ask-pass --sleep 60"
       echo 
-      echo "  The above command collects data from two status snapshots with 60 seconds in between,"
-      echo "  and allows you to reference the sampled information in a folder called 'raw_samples'."
-      echo "  Your PlanetScale representative may ask you to include said samples, or reference them"
-      echo "  in a followup conversation, if necessary."
+      echo "  The above command collects data from two status snapshots with 60 seconds in between."
+      echo "  It saves the sampled information in a folder called 'ps_samples_[timestamp]' and produces"
+      echo "  an archive of both its output, the sample files and the included freeform questionnaire."
+      echo
+      echo "  Feel free to review and edit these files as necessary, and be careful not to share sensitive"
+      echo "  information. If you choose not to share all collected data, your PlanetScale representative" 
+      echo "  may ask you to provide additional information at a later stage."
       echo 
       return 1
    fi
@@ -189,7 +194,7 @@ parse_options() {
    OPT_VERSION=""
    OPT_HELP=""
    OPT_ASK_PASS=""
-   OPT_MD=""
+   OPT_TXT=""
    PO_DIR="$PS_TMPDIR/po"
 
    if [ ! -d "$PO_DIR" ]; then
@@ -672,9 +677,7 @@ fuzzy_pct () {
 
 section () {
    local str="$1"
-   if [ -n "$OPT_MD" ]; then
-      echo "## ${str}"
-   else
+   if [ -n "$OPT_TXT" ]; then
       awk -v var="${str} _" 'BEGIN {
          line = sprintf("# %-60s", var);
          i = index(line, "_");
@@ -682,6 +685,8 @@ section () {
          gsub(/[_ \t]/, "#", x);
          printf("%s%s\n", substr(line, 1, i-1), x);
       }'
+   else
+      echo "## ${str}"
    fi
    
 }
@@ -826,8 +831,8 @@ setup_data_dir () {
    local existing_dir="$1"
    local data_dir=""
    if [ -z "$existing_dir" ]; then
-      mkdir "$PS_TMPDIR/data" || die "Cannot mkdir $PS_TMPDIR/data"
-      data_dir="$PS_TMPDIR/data"
+      mkdir "ps_samples_$TIMESTAMP" || die "Cannot mkdir ps_samples_$TIMESTAMP"
+      data_dir="ps_samples_$TIMESTAMP"
    else
       if [ ! -d "$existing_dir" ]; then
          mkdir "$existing_dir" || die "Cannot mkdir $existing_dir"
@@ -838,6 +843,7 @@ setup_data_dir () {
       rm "$existing_dir/test"    || die "Cannot rm $existing_dir/test"
       data_dir="$existing_dir"
    fi
+   SAMPLES_DIR=$data_dir
    echo "$data_dir"
 }
 
@@ -1723,12 +1729,13 @@ report_mysql_summary () {
 
    local NAME_VAL_LEN=35
 
+   local OUTFILE="ps_report_$TIMESTAMP.md"
 
-   section "PlanetScale Migration Pre-Check Report"
-   name_val "System time" "`date -u +'%F %T UTC'` (local TZ: `date +'%Z %z'`)"
-   echo ""
+   section "PlanetScale Migration Pre-Check Report" | tee -a $OUTFILE
+   name_val "System time" "`date -u +'%F %T UTC'` (local TZ: `date +'%Z %z'`)" | tee -a $OUTFILE
+   echo "" | tee -a $OUTFILE
    
-   section "Summary"
+   section "Summary" | tee -a $OUTFILE
    local uptime="$(get_var Uptime "$dir/mysql-status")"
    local uptime_interval=$(echo "$uptime" | cut -f2)
    local rows_read_start="$(get_var "Innodb_rows_read" "$dir/mysql-status")"
@@ -1736,176 +1743,178 @@ report_mysql_summary () {
    local innodb_rows_updated="$(get_var "Innodb_rows_updated" "$dir/mysql-status")"
    local innodb_rows_inserted="$(get_var "Innodb_rows_inserted" "$dir/mysql-status")"
    local rows_written_start=$((innodb_rows_deleted + innodb_rows_updated + innodb_rows_inserted))
-   name_val "Rows written since startup" "$rows_written_start"
-   name_val "Rows read since startup" "$rows_read_start"
-   name_val "Daily average rows written" $((rows_written_start/uptime_interval*60*60*24))
-   name_val "Daily average rows read" $((rows_read_start/uptime_interval*60*60*24))
-   echo ""
+   name_val "Rows written since startup" "$rows_written_start" | tee -a $OUTFILE
+   name_val "Rows read since startup" "$rows_read_start" | tee -a $OUTFILE
+   name_val "Daily average rows written" $((rows_written_start/uptime_interval*60*60*24)) | tee -a $OUTFILE
+   name_val "Daily average rows read" $((rows_read_start/uptime_interval*60*60*24)) | tee -a $OUTFILE
+   echo "" | tee -a $OUTFILE
 
-   section "Table Information (top 20, approx. row counts)"
-   format_table_sizes "$dir/table-sizes"
-   echo ""
+   section "Table Information (top 20, approx. row counts)" | tee -a $OUTFILE
+   format_table_sizes "$dir/table-sizes" | tee -a $OUTFILE
+   echo "" | tee -a $OUTFILE
 
    local user="$(get_var "pt-summary-internal-user" "$dir/mysql-variables")"
    local port="$(get_var port "$dir/mysql-variables")"
    local now="$(get_var "pt-summary-internal-now" "$dir/mysql-variables")"
-   section "Report On Port ${port}"
-   name_val User "${user}"
-   name_val Time "${now} ($(get_mysql_timezone "$dir/mysql-variables"))"
-   name_val Hostname "$(get_var hostname "$dir/mysql-variables")"
-   get_mysql_version "$dir/mysql-variables"
-   get_cloud_platform "$dir/mysql-variables"
+   section "Report On Port ${port}" | tee -a $OUTFILE
+   name_val User "${user}" | tee -a $OUTFILE
+   name_val Time "${now} ($(get_mysql_timezone "$dir/mysql-variables"))" | tee -a $OUTFILE
+   name_val Hostname "$(get_var hostname "$dir/mysql-variables")" | tee -a $OUTFILE
+   get_mysql_version "$dir/mysql-variables" | tee -a $OUTFILE
+   get_cloud_platform "$dir/mysql-variables" | tee -a $OUTFILE
 
 
    local uptime="$(get_var Uptime "$dir/mysql-status")"
    local current_time="$(get_var "pt-summary-internal-current_time" "$dir/mysql-variables")"
-   name_val Started "$(get_mysql_uptime "${uptime}" "${current_time}")"
+   name_val Started "$(get_mysql_uptime "${uptime}" "${current_time}")" | tee -a $OUTFILE
 
    local num_dbs="$(grep -c . "$dir/mysql-databases")"
-   name_val Databases "${num_dbs}"
+   name_val Databases "${num_dbs}" | tee -a $OUTFILE
    local datadir=$(get_var datadir "$dir/mysql-variables")
-   name_val Datadir "${datadir}"
+   name_val Datadir "${datadir}" | tee -a $OUTFILE
 
    local fuzz_procs=$(fuzz $(get_var Threads_connected "$dir/mysql-status"))
    local fuzz_procr=$(fuzz $(get_var Threads_running "$dir/mysql-status"))
-   name_val Processes "${fuzz_procs} connected, ${fuzz_procr} running"
+   name_val Processes "${fuzz_procs} connected, ${fuzz_procr} running" | tee -a $OUTFILE
 
    local replica=""
    if [ -s "$dir/mysql-replica" ]; then replica=""; else replica="not "; fi
    local replicacount=$(grep -c 'Binlog Dump' "$dir/mysql-processlist")
-   name_val Replication "Is ${replica}a replica, has ${replicacount} replicas connected"
+   name_val Replication "Is ${replica}a replica, has ${replicacount} replicas connected" | tee -a $OUTFILE
 
-   echo ""
-   section "Noteworthy Variables"
-   section_noteworthy_variables "$dir/mysql-variables"
-   echo ""
-   section "Noteworthy Technologies"
+   echo "" | tee -a $OUTFILE
+   section "Noteworthy Variables" | tee -a $OUTFILE
+   section_noteworthy_variables "$dir/mysql-variables" | tee -a $OUTFILE
+   echo "" | tee -a $OUTFILE
+   section "Noteworthy Technologies" | tee -a $OUTFILE
    if [ -s "$dir/mysqldump" ]; then
       if grep -i FULLTEXT "$dir/mysqldump" > /dev/null; then
-         name_val "Full Text Indexing" "Yes"
+         name_val "Full Text Indexing" "Yes" | tee -a $OUTFILE
       else
-         name_val "Full Text Indexing" "No"
+         name_val "Full Text Indexing" "No" | tee -a $OUTFILE
       fi
       if grep -i 'GEOMETRY\|POINT\|LINESTRING\|POLYGON' "$dir/mysqldump" > /dev/null; then
-         name_val "Geospatial Types" "Yes"
+         name_val "Geospatial Types" "Yes" | tee -a $OUTFILE
       else
-         name_val "Geospatial Types" "No"
+         name_val "Geospatial Types" "No" | tee -a $OUTFILE
       fi
       if grep -i 'FOREIGN KEY' "$dir/mysqldump" > /dev/null; then
-         name_val "Foreign Keys" "Yes"
+         name_val "Foreign Keys" "Yes" | tee -a $OUTFILE
       else
-         name_val "Foreign Keys" "No"
+         name_val "Foreign Keys" "No" | tee -a $OUTFILE
       fi
       if grep -i 'PARTITION BY' "$dir/mysqldump" > /dev/null; then
-         name_val "Partitioning" "Yes"
+         name_val "Partitioning" "Yes" | tee -a $OUTFILE
       else
-         name_val "Partitioning" "No"
+         name_val "Partitioning" "No" | tee -a $OUTFILE
       fi
       if grep -e 'ENGINE=InnoDB.*ROW_FORMAT' \
          -e 'ENGINE=InnoDB.*KEY_BLOCK_SIZE' "$dir/mysqldump" > /dev/null; then
-         name_val "InnoDB Compression" "Yes"
+         name_val "InnoDB Compression" "Yes" | tee -a $OUTFILE
       else
-         name_val "InnoDB Compression" "No"
+         name_val "InnoDB Compression" "No" | tee -a $OUTFILE
       fi
    fi
    local ssl="$(get_var Ssl_accepts "$dir/mysql-status")"
    if [ -n "$ssl" -a "${ssl:-0}" -gt 0 ]; then
-      name_val "SSL" "Yes"
+      name_val "SSL" "Yes" | tee -a $OUTFILE
    else
-      name_val "SSL" "No"
+      name_val "SSL" "No" | tee -a $OUTFILE
    fi
    local lock_tables="$(get_var Com_lock_tables "$dir/mysql-status")"
    if [ -n "$lock_tables" -a "${lock_tables:-0}" -gt 0 ]; then
-      name_val "Explicit LOCK TABLES" "Yes"
+      name_val "Explicit LOCK TABLES" "Yes" | tee -a $OUTFILE
    else
-      name_val "Explicit LOCK TABLES" "No"
+      name_val "Explicit LOCK TABLES" "No" | tee -a $OUTFILE
    fi
    local xat="$(get_var Com_xa_start "$dir/mysql-status")"
    if [ -n "$xat" -a "${xat:-0}" -gt 0 ]; then
-      name_val "XA Transactions" "Yes"
+      name_val "XA Transactions" "Yes" | tee -a $OUTFILE
    else
-      name_val "XA Transactions" "No"
+      name_val "XA Transactions" "No" | tee -a $OUTFILE
    fi
    local prep=$(( $(get_var "Com_stmt_prepare" "$dir/mysql-status") + $(get_var "Com_prepare_sql" "$dir/mysql-status") ))
    if [ "${prep}" -gt 0 ]; then
-      name_val "Prepared Statements" "Yes"
+      name_val "Prepared Statements" "Yes" | tee -a $OUTFILE
    else
-      name_val "Prepared Statements" "No"
+      name_val "Prepared Statements" "No" | tee -a $OUTFILE
    fi
-   echo ""
-   section "Processlist"
-   summarize_processlist "$dir/mysql-processlist"
-   echo ""
-   section "Status Counters (Wait ${OPT_SLEEP} Seconds)"
+   echo "" | tee -a $OUTFILE
+   section "Processlist" | tee -a $OUTFILE
+   summarize_processlist "$dir/mysql-processlist" | tee -a $OUTFILE
+   echo "" | tee -a $OUTFILE
+   section "Status Counters (Wait ${OPT_SLEEP} Seconds)" | tee -a $OUTFILE
    wait
    local counters_pattern="$(counters_pattern)"
-   format_status_variables "$dir/mysql-status-defer" | grep "${counters_pattern}"
-   echo ""
+   format_status_variables "$dir/mysql-status-defer" | grep "${counters_pattern}" | tee -a $OUTFILE
+   echo "" | tee -a $OUTFILE
    local has_wsrep="$(get_var "wsrep_on" "$dir/mysql-variables")"
    if [ -n "${has_wsrep:-""}" ]; then
       local wsrep_on="$(feat_on "$dir/mysql-variables" "wsrep_on")"
-      section "Galera / Percona XtraDB Cluster"
+      section "Galera / Percona XtraDB Cluster" | tee -a $OUTFILE
       if [ "${wsrep_on:-""}" = "Enabled" ]; then
-         section_percona_xtradb_cluster "$dir/mysql-variables" "$dir/mysql-status"
+         section_percona_xtradb_cluster "$dir/mysql-variables" "$dir/mysql-status" | tee -a $OUTFILE
       else
-         name_val "wsrep_on" "OFF"
+         name_val "wsrep_on" "OFF" | tee -a $OUTFILE
       fi
-      echo ""
+      echo "" | tee -a $OUTFILE
    fi
 
    local has_query_cache=$(get_var have_query_cache "$dir/mysql-variables")
    if [ "$has_query_cache" = 'YES' ]; then
-      section "Query cache"
+      section "Query cache" | tee -a $OUTFILE
       local query_cache_size=$(get_var query_cache_size "$dir/mysql-variables")
       local used=$(( ${query_cache_size} - $(get_var Qcache_free_memory "$dir/mysql-status") ))
       local hrat=$(fuzzy_pct $(get_var Qcache_hits "$dir/mysql-status") $(get_var Qcache_inserts "$dir/mysql-status"))
-      name_val query_cache_type $(get_var query_cache_type "$dir/mysql-variables")
-      name_val Size "$(shorten ${query_cache_size} 1)"
-      name_val Usage "$(fuzzy_pct ${used} ${query_cache_size})"
-      name_val HitToInsertRatio "${hrat}"
-      echo ""
+      name_val query_cache_type $(get_var query_cache_type "$dir/mysql-variables") | tee -a $OUTFILE
+      name_val Size "$(shorten ${query_cache_size} 1)" | tee -a $OUTFILE
+      name_val Usage "$(fuzzy_pct ${used} ${query_cache_size})" | tee -a $OUTFILE
+      name_val HitToInsertRatio "${hrat}" | tee -a $OUTFILE
+      echo "" | tee -a $OUTFILE
    fi
 
-   section "Configuration File"
+   section "Configuration File" | tee -a $OUTFILE
    local cnf_file="$(get_var "pt-summary-internal-Config_File_path" "$dir/mysql-variables")"
 
    if [ -n "${cnf_file}" ]; then
-      name_val "Config File" "${cnf_file}"
-      pretty_print_cnf_file "$dir/mysql-config-file"
+      name_val "Config File" "${cnf_file}" | tee -a $OUTFILE
+      pretty_print_cnf_file "$dir/mysql-config-file" | tee -a $OUTFILE
    else
-      name_val "Config File" "Cannot autodetect or find, giving up"
+      name_val "Config File" "Cannot autodetect or find, giving up" | tee -a $OUTFILE
    fi
 
-   echo ""
-   section "Schema"
+   echo "" | tee -a $OUTFILE
+   section "Schema" | tee -a $OUTFILE
    if [ -s "$dir/mysqldump" ] \
       && grep 'CREATE TABLE' "$dir/mysqldump" >/dev/null 2>&1; then
-         format_overall_db_stats "$dir/mysqldump"
+         format_overall_db_stats "$dir/mysqldump" | tee -a $OUTFILE
    elif [ ! -e "$dir/mysqldump" -a "$OPT_READ_SAMPLES" ]; then
       echo "Skipping schema analysis because --read-samples $dir/mysqldump " \
-         "does not exist"
+         "does not exist" | tee -a $OUTFILE
    elif [ -z "$OPT_DATABASES" -a -z "$OPT_ALL_DATABASES" ]; then
-      echo "Specify --databases or --all-databases to dump and summarize schemas"
+      echo "Specify --databases or --all-databases to dump and summarize schemas" | tee -a $OUTFILE
    else
-      echo "Skipping schema analysis due to apparent error in dump file"
+      echo "Skipping schema analysis due to apparent error in dump file" | tee -a $OUTFILE
    fi
 
-   echo ""
-   section "Binary Logging"
+   echo "" | tee -a $OUTFILE
+   section "Binary Logging" | tee -a $OUTFILE
 
    if    [ -s "$dir/mysql-master-logs" ] \
       || [ -s "$dir/mysql-master-status" ]; then
-      summarize_binlogs "$dir/mysql-master-logs"
+      summarize_binlogs "$dir/mysql-master-logs" | tee -a $OUTFILE
       local format="$(get_var binlog_format "$dir/mysql-variables")"
-      name_val binlog_format "${format:-STATEMENT}"
-      name_val gtid_mode "$(get_var gtid_mode "$dir/mysql-variables")"
-      name_val expire_logs_days "$(get_var expire_logs_days "$dir/mysql-variables")"
-      name_val binlog_expire_logs_seconds "$(get_var binlog_expire_logs_seconds "$dir/mysql-variables")"
-      name_val sync_binlog "$(get_var sync_binlog "$dir/mysql-variables")"
+      name_val binlog_format "${format:-STATEMENT}" | tee -a $OUTFILE
+      name_val gtid_mode "$(get_var gtid_mode "$dir/mysql-variables")" | tee -a $OUTFILE
+      name_val expire_logs_days "$(get_var expire_logs_days "$dir/mysql-variables")" | tee -a $OUTFILE
+      name_val binlog_expire_logs_seconds "$(get_var binlog_expire_logs_seconds "$dir/mysql-variables")" | tee -a $OUTFILE
+      name_val sync_binlog "$(get_var sync_binlog "$dir/mysql-variables")" | tee -a $OUTFILE
    fi
-   echo ""
-   section "The End"
-   echo ""
+   echo "" | tee -a $OUTFILE
+   section "The End" | tee -a $OUTFILE
+   echo "" | tee -a $OUTFILE
+
+   tar -czf ps_archive_$TIMESTAMP.tgz $OUTFILE $SAMPLES_DIR *questions*.md
 }
 
 # ###########################################################################
@@ -1979,6 +1988,7 @@ main() {
    mk_tmpdir
 
    # Set DATA_DIR where we'll save collected data files.
+   TIMESTAMP=$(date +%Y%m%d%H%M%S)
    local data_dir="$(setup_data_dir "${OPT_SAVE_SAMPLES:-""}")"
    if [ -z "$data_dir" ]; then
       exit $?
@@ -2054,37 +2064,19 @@ losing the formatting.  It should work well on any modern UNIX systems.
 ps-prechecks is a heavily modified version of pt-mysql-summary, which is part of the
 Percona Toolkit.
 
-=head1 RISKS
-
-ps-prechecks is designed to connect to your live database environment,
-execute queries to collect the relevant information, and process/summarize 
-the data without further impacting your database environment. While this
-scipt is well tested, any database tool can pose a risk to your database
-environment.
-
-Before using this tool, please:
-
-=over
-
-=item * Read the tool's documentation
-
-=item * Test the tool on a non-production server first
-
-=item * Backup your production server and verify the backups
-
-=back
-
 =head1 DESCRIPTION
 
 ps-prechecks works by connecting to a MySQL database server and querying
 it for status and configuration information.  It saves these bits of data
 into files in a temporary directory, and then formats them neatly with awk
-and other scripting languages.
+and other scripting languages. Finally, it creates an archive containing both
+the summary and the relevant files, that can be sent to the PlanetScale team 
+for analysis.
 
 To use, simply execute it.  Optionally add a double dash and then the same
 command-line options you would use to connect to MySQL, such as the following:
 
-  ps-prechecks --user=root
+  ps-prechecks --host <hostname> --user <user> --port 3306 --ask-pass
 
 The tool interacts minimally with the server upon which it runs.
 
@@ -2361,6 +2353,26 @@ This section shows configuration and status of the binary logs. If there are
 zero-sized binary logs, then it is possible that the binlog index is out of sync
 with the binary logs that actually exist on disk.
 
+=head1 RISKS
+
+ps-prechecks is designed to connect to your live database environment,
+execute queries to collect the relevant information, and process/summarize 
+the data without further impacting your database environment. While this
+scipt is well tested, any database tool can pose a risk to your database
+environment.
+
+Before using this tool, please:
+
+=over
+
+=item * Read the tool's documentation
+
+=item * Test the tool on a non-production server first
+
+=item * Backup your production server and verify the backups
+
+=back
+
 =head1 OPTIONS
 
 All options after -- are passed to C<mysql>.
@@ -2368,6 +2380,8 @@ All options after -- are passed to C<mysql>.
 =over
 
 =item --all-databases
+
+type: bool; default: TRUE
 
 mysqldump and summarize all databases.  See L<"--databases">.
 
@@ -2406,9 +2420,9 @@ short form: -h; type: string
 
 Host to connect to.
 
-=item --md
+=item --txt
 
-Generate output using MarkDown format instead of plain text.
+Generate output using plain text format instead of MarkDown.
 
 =item --password
 
@@ -2531,7 +2545,7 @@ Place, Suite 330, Boston, MA  02111-1307  USA.
 
 =head1 VERSION
 
-ps-prechecks 1.0
+ps-prechecks 1.1
 
 =cut
 
