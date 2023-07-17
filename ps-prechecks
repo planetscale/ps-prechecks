@@ -923,7 +923,7 @@ find_my_cnf_file() {
 collect_table_sizes () {
    local total="$($CMD_MYSQL $EXT_ARGV -ss -e "SELECT SUM(data_length+index_length) AS size FROM information_schema.tables WHERE table_schema NOT IN ('information_schema','mysql','performance_schema','sys','_vt');" 2>/dev/null)"
    echo "Total    $total"   
-   $CMD_MYSQL $EXT_ARGV -ss -e "SELECT table_name, SUM(data_length+index_length) AS total_length, CONCAT(' (',SUM(table_rows),' rows)') AS table_rows_txt FROM information_schema.tables WHERE table_schema NOT IN ('information_schema','mysql','performance_schema','sys','_vt') GROUP BY table_name ORDER BY total_length DESC, sum(table_rows) DESC, table_name ASC;" 2>/dev/null
+   $CMD_MYSQL $EXT_ARGV -ss -e "SELECT CONCAT(table_schema,'.',table_name), SUM(data_length+index_length) AS total_length, CONCAT(' (',SUM(table_rows),' rows)') AS table_rows_txt FROM information_schema.tables WHERE table_schema NOT IN ('information_schema','mysql','performance_schema','sys','_vt') GROUP BY table_schema, table_name ORDER BY total_length DESC, sum(table_rows) DESC, table_name ASC;" 2>/dev/null
 }
 
 collect_mysql_variables () {
