@@ -843,7 +843,6 @@ setup_data_dir () {
       rm "$existing_dir/test"    || die "Cannot rm $existing_dir/test"
       data_dir="$existing_dir"
    fi
-   SAMPLES_DIR=$data_dir
    echo "$data_dir"
 }
 
@@ -1990,6 +1989,7 @@ main() {
    # Set DATA_DIR where we'll save collected data files.
    TIMESTAMP=$(date +%Y%m%d%H%M%S)
    local data_dir="$(setup_data_dir "${OPT_SAVE_SAMPLES:-""}")"
+   SAMPLES_DIR=$data_dir
    if [ -z "$data_dir" ]; then
       exit $?
    fi
