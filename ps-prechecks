@@ -96,7 +96,7 @@ usage_or_errors() {
    local version=""
 
    if [ "$OPT_VERSION" ]; then
-      version=$(grep '^pt-[^ ]\+ [0-9]' "$file")
+      version=$(grep '^ps-[^ ]\+ [0-9]' "$file")
       echo "$version"
       return 1
    fi
