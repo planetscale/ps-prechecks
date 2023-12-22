@@ -1209,7 +1209,7 @@ format_table_sizes () {
    local counter=0
    while read var && [ $counter -lt 21 ]; do
       read -ra arr -d '' <<<"$var"
-      name_val "${arr[0]}" "$(shorten ${arr[1]} 0) ${arr[*]:2}"
+      name_val "$(shorten ${arr[1]} 0) ${arr[*]:2}" "${arr[0]}"
       let counter=counter+1
    done < "$file"
    
