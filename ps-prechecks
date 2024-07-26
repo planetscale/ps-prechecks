@@ -1913,7 +1913,9 @@ report_mysql_summary () {
    section "The End" | tee -a $OUTFILE
    echo "" | tee -a $OUTFILE
 
-   tar -czf ps_archive_$TIMESTAMP.tgz $OUTFILE $SAMPLES_DIR *questions*.md
+   FREEFORM_RESPONSES=`ls *questions*.md`
+
+   tar -czf ps_archive_$TIMESTAMP.tgz $OUTFILE $SAMPLES_DIR $FREEFORM_RESPONSES
 }
 
 # ###########################################################################
