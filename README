@@ -1,50 +1,110 @@
-NAME
-    ps-prechecks - Summarizes information about your MySQL instance to help
-    prepare migration into PlanetScale
+`ps-prechecks` summarizes the status and configuration of your MySQL instance to help prepare migration into PlanetScale. It works by connecting to a MySQL database server and querying it for status and configuration information. It saves these bits of data into files in a temporary directory, and then formats them neatly with AWK and other scripting languages.
 
-SYNOPSIS
-    Usage: ps-prechecks [OPTIONS]
+It is not a tuning tool or diagnosis tool. It produces a report that is easy to diff and can be pasted into emails without losing the formatting. It should work well on any modern UNIX systems. The tool interacts minimally with the server upon which it runs.
 
-    ps-prechecks summarizes the status and configuration of a MySQL database
-    server so that you can learn about it at a glance, as well as allowing
-    you to share the relevant information with PlanetScale. It is not a
-    tuning tool or diagnosis tool. It produces a report that is easy to diff
-    and can be pasted into emails without losing the formatting. It should
-    work well on any modern UNIX systems.
+`ps-prechecks` is a heavily modified version of pt-mysql-summary, which is part of the Percona Toolkit.
 
-    ps-prechecks is a heavily modified version of pt-mysql-summary, which is
-    part of the Percona Toolkit.
+## Risks
 
-RISKS
-    ps-prechecks is designed to connect to your live database environment,
-    execute queries to collect the relevant information, and
-    process/summarize the data without further impacting your database
-    environment. While this scipt is well tested, any database tool can pose
-    a risk to your database environment.
+`ps-prechecks` is designed to connect to your live database environment, execute queries to collect the relevant information, and process/summarize the data without further impacting your database environment. While this script is well tested, any database tool can pose
+a risk to your database environment.
 
-    Before using this tool, please:
+Before using this tool, please:
 
-    *   Read the tool's documentation
+- Read all of the information on this page
+- Test the tool on a non-production server first
+- Back up your production server and verify the backups
 
-    *   Test the tool on a non-production server first
+## Usage
 
-    *   Backup your production server and verify the backups
+To use it, simply execute it. Optionally add a double dash and then the same command-line options you would use to connect to MySQL, such as the following:
 
-DESCRIPTION
-    ps-prechecks works by connecting to a MySQL database server and querying
-    it for status and configuration information. It saves these bits of data
-    into files in a temporary directory, and then formats them neatly with
-    awk and other scripting languages.
+```
+ps-prechecks --user=root
+```
 
-    To use, simply execute it. Optionally add a double dash and then the
-    same command-line options you would use to connect to MySQL, such as the
-    following:
+You can find additional options below.
 
-      ps-prechecks --user=root
+### Options
+    All options after -- are passed to "mysql".
 
-    The tool interacts minimally with the server upon which it runs.
+    --all-databases
+        mysqldump and summarize all databases. See "--databases".
 
-OUTPUT
+    --ask-pass
+        Prompt for a password when connecting to MySQL.
+
+    --config
+        type: string
+
+        Read this comma-separated list of config files. If specified, this
+        must be the first option on the command line.
+
+    --databases
+        type: string
+
+        mysqldump and summarize this comma-separated list of databases.
+        Specify "--all-databases" instead if you want to dump and summary
+        all databases.
+
+    --defaults-file
+        short form: -F; type: string
+
+        Only read mysql options from the given file. You must give an
+        absolute pathname.
+
+    --help
+        Print help and exit.
+
+    --host
+        short form: -h; type: string
+
+        Host to connect to.
+
+    --md
+        Generate output using MarkDown format instead of plain text.
+
+    --password
+        short form: -p; type: string
+
+        Password to use when connecting. If password contains commas they
+        must be escaped with a backslash: "exam\,ple"
+
+    --port
+        short form: -P; type: int
+
+        Port number to use for connection.
+
+    --read-samples
+        type: string
+
+        Create a report from the files found in this directory.
+
+    --save-samples
+        type: string
+
+        Save the data files used to generate the summary in this directory.
+
+    --sleep
+        type: int; default: 10
+
+        Seconds to sleep when gathering status counters.
+
+    --socket
+        short form: -S; type: string
+
+        Socket file to use for connection.
+
+    --user
+        short form: -u; type: string
+
+        User for login if not current user.
+
+    --version
+        Print tool's version and exit.
+
+## OUTPUT
+
     Many of the outputs from this tool are deliberately rounded to show
     their magnitude but not the exact detail. This is called fuzzy-rounding.
     The idea is that it does not matter whether a server is running 918
@@ -321,127 +381,32 @@ OUTPUT
     are zero-sized binary logs, then it is possible that the binlog index is
     out of sync with the binary logs that actually exist on disk.
 
-OPTIONS
-    All options after -- are passed to "mysql".
+## System requirements
 
-    --all-databases
-        mysqldump and summarize all databases. See "--databases".
+This tool requires Bash v3 or newer, Perl 5.8 or newer, and binutils. These are generally already provided by most distributions. On BSD systems, it may require a mounted procfs.
 
-    --ask-pass
-        Prompt for a password when connecting to MySQL.
+## Bugs
+Please report bugs to `liz@planetscale.com`, or the PlanetScale representative you're working with. Include the following information in your bug report:
 
-    --config
-        type: string
+- Complete command-line used to run the tool
+- Tool "--version"
+- MySQL version of all servers involved
+- Output from the tool including STDERR
+- Input files (log/dump/config files, etc.)
 
-        Read this comma-separated list of config files. If specified, this
-        must be the first option on the command line.
+If possible, include debugging output by running the tool with "PSDEBUG"; see "ENVIRONMENT".
 
-    --databases
-        type: string
+**IMPORTANT**: Using <PSDEBUG> might expose passwords. When debug is enabled, all command line parameters are shown in the output.
 
-        mysqldump and summarize this comma-separated list of databases.
-        Specify "--all-databases" instead if you want to dump and summary
-        all databases.
+## AUTHORS
 
-    --defaults-file
-        short form: -F; type: string
+Baron Schwartz, Brian Fraser, Daniel Nichter and Liz van Dijk
 
-        Only read mysql options from the given file. You must give an
-        absolute pathname.
+## ABOUT PERCONA TOOLKIT
 
-    --help
-        Print help and exit.
+This tool is a heavily modified version of pt-mysql-summary, which is part of Percona Toolkit, a collection of advanced command-line tools for MySQL developed by Percona. Percona Toolkit was forked from two projects in June, 2011: Maatkit and Aspersa. Those projects were created by Baron Schwartz and primarily developed by him and Daniel Nichter. Visit <http://www.percona.com/software/> to learn about other free, open-source software from Percona.
 
-    --host
-        short form: -h; type: string
-
-        Host to connect to.
-
-    --md
-        Generate output using MarkDown format instead of plain text.
-
-    --password
-        short form: -p; type: string
-
-        Password to use when connecting. If password contains commas they
-        must be escaped with a backslash: "exam\,ple"
-
-    --port
-        short form: -P; type: int
-
-        Port number to use for connection.
-
-    --read-samples
-        type: string
-
-        Create a report from the files found in this directory.
-
-    --save-samples
-        type: string
-
-        Save the data files used to generate the summary in this directory.
-
-    --sleep
-        type: int; default: 10
-
-        Seconds to sleep when gathering status counters.
-
-    --socket
-        short form: -S; type: string
-
-        Socket file to use for connection.
-
-    --user
-        short form: -u; type: string
-
-        User for login if not current user.
-
-    --version
-        Print tool's version and exit.
-
-ENVIRONMENT
-    This tool does not use any environment variables.
-
-SYSTEM REQUIREMENTS
-    This tool requires Bash v3 or newer, Perl 5.8 or newer, and binutils.
-    These are generally already provided by most distributions. On BSD
-    systems, it may require a mounted procfs.
-
-BUGS
-    Please report bugs to liz@planetscale.com, or the PlanetScale
-    representative you're working with. Include the following information in
-    your bug report:
-
-    *   Complete command-line used to run the tool
-
-    *   Tool "--version"
-
-    *   MySQL version of all servers involved
-
-    *   Output from the tool including STDERR
-
-    *   Input files (log/dump/config files, etc.)
-
-    If possible, include debugging output by running the tool with
-    "PSDEBUG"; see "ENVIRONMENT".
-
-ATTENTION
-    Using <PSDEBUG> might expose passwords. When debug is enabled, all
-    command line parameters are shown in the output.
-
-AUTHORS
-    Baron Schwartz, Brian Fraser, Daniel Nichter and Liz van Dijk
-
-ABOUT PERCONA TOOLKIT
-    This tool is a heavily modified version of pt-mysql-summary, which is
-    part of Percona Toolkit, a collection of advanced command-line tools for
-    MySQL developed by Percona. Percona Toolkit was forked from two projects
-    in June, 2011: Maatkit and Aspersa. Those projects were created by Baron
-    Schwartz and primarily developed by him and Daniel Nichter. Visit
-    <http://www.percona.com/software/> to learn about other free,
-    open-source software from Percona.
-
-COPYRIGHT, LICENSE, AND WARRANTY
+## COPYRIGHT, LICENSE, AND WARRANTY
     This program is copyright 2011-2021 Percona LLC and/or its affiliates,
     2010-2011 Baron Schwartz.
 
@@ -458,6 +423,5 @@ COPYRIGHT, LICENSE, AND WARRANTY
     You should have received a copy of the GNU General Public License along
     with this program; if not, write to the Free Software Foundation, Inc.,
     59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
-
-VERSION
+## VERSION
     ps-prechecks 1.0
